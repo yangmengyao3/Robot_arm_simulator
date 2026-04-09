@@ -1,0 +1,3 @@
+font.sans-serif : SimHei, Microsoft YaHei, DejaVu Sans, Arial Unicode MS
+axes.unicode_minus : False
+font.family : sans-serif
