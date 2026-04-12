@@ -76,14 +76,14 @@ class CoordinateSystemPanel(QWidget):
         origin_layout = QHBoxLayout()
         origin_layout.addWidget(QLabel("原点X:"))
         self.origin_x_spin = QDoubleSpinBox()
-        self.origin_x_spin.setRange(-100, 100)
+        self.origin_x_spin.setRange(-9999, 9999)
         self.origin_x_spin.setDecimals(3)
         self.origin_x_spin.valueChanged.connect(self.parameter_changed.emit)
         
         origin_layout.addWidget(self.origin_x_spin)
         origin_layout.addWidget(QLabel("原点Y:"))
         self.origin_y_spin = QDoubleSpinBox()
-        self.origin_y_spin.setRange(-100, 100)
+        self.origin_y_spin.setRange(-9999, 9999)
         self.origin_y_spin.setDecimals(3)
         self.origin_y_spin.valueChanged.connect(self.parameter_changed.emit)
         
