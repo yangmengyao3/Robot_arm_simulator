@@ -15,6 +15,7 @@ else:
     print(f"   期望路径：{font_path}")
     print("\n请从 C:\\Windows\\Fonts\\simhei.ttf 复制到这个位置")
 import math
+import time
 import json
 import matplotlib
 matplotlib.use('Qt5Agg')  # 使用Qt5后端
@@ -296,6 +297,9 @@ class RobotArmSimulator(QMainWindow):
         self.drag_start_pos = (0, 0)
         self.drag_motion_id = None
         self.drag_release_id = None
+        # 拖拽物体时节流全量重绘，避免一帧内多次 update_visualization 导致抖动
+        self._drag_viz_min_interval = 1.0 / 55.0
+        self._last_drag_viz_time = 0.0
         
         # 连接画布点击事件
         self.canvas.canvas.mpl_connect('pick_event', self.on_pick)
@@ -2238,6 +2242,7 @@ class RobotArmSimulator(QMainWindow):
         self.is_dragging = True
         self.drag_item = ("coordinate", system_name)
         self.drag_start_pos = (mouse_event.xdata, mouse_event.ydata)
+        self._last_drag_viz_time = 0.0  # 新拖拽首帧立即重绘
         
         # 连接鼠标移动和释放事件，并保存连接ID
         self.drag_motion_id = self.canvas.canvas.mpl_connect('motion_notify_event', self.on_drag_move)
@@ -2253,6 +2258,7 @@ class RobotArmSimulator(QMainWindow):
         self.is_dragging = True
         self.drag_item = ("robot_base", None)
         self.drag_start_pos = (mouse_event.xdata, mouse_event.ydata)
+        self._last_drag_viz_time = 0.0
         
         # 连接鼠标移动和释放事件，并保存连接ID
         self.drag_motion_id = self.canvas.canvas.mpl_connect('motion_notify_event', self.on_drag_move)
@@ -2268,6 +2274,7 @@ class RobotArmSimulator(QMainWindow):
         self.is_dragging = True
         self.drag_item = ("robot_gripper", None)
         self.drag_start_pos = (mouse_event.xdata, mouse_event.ydata)
+        self._last_drag_viz_time = 0.0
         
         # 连接鼠标移动和释放事件，并保存连接ID
         self.drag_motion_id = self.canvas.canvas.mpl_connect('motion_notify_event', self.on_drag_move)
@@ -2338,8 +2345,11 @@ class RobotArmSimulator(QMainWindow):
             # 更新拖拽起始位置
             self.drag_start_pos = (event.xdata, event.ydata)
             
-            # 更新可视化
-            self.update_visualization()
+            # 更新可视化（限频，避免每根 motion 事件都全量 clear+重绘）
+            now = time.monotonic()
+            if now - self._last_drag_viz_time >= self._drag_viz_min_interval:
+                self._last_drag_viz_time = now
+                self.update_visualization()
     
     def on_drag_release(self, event):
         """
@@ -3147,9 +3157,6 @@ class RobotArmSimulator(QMainWindow):
             if system:
                 wx, wy = system.point_to_world(point['x'], point['y'])
                 
-                # ✅ 调试输出
-                print(f"🎨 绘制点：{name}, 世界坐标：({wx:.2f}, {wy:.2f})")
-
                 # 绘制点
                 self.canvas.ax.plot(wx, wy, 'o', color=system.color, markersize=5)
                 

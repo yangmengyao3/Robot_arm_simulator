@@ -223,7 +223,7 @@ class ZoomableCanvas(QWidget):
                 self.is_dragging = False
                 # 拖动结束后，完整更新一次网格显示
                 self.update_grid_display()
-                self.canvas.draw()
+                self.canvas.draw_idle()
                 self.canvas_updated.emit()
     
     def on_mouse_double_click(self, event):
@@ -276,8 +276,8 @@ class ZoomableCanvas(QWidget):
             # 更新网格显示
             self.update_grid_display()
             
-            # 更新画布
-            self.canvas.draw()
+            # 更新画布（异步合并重绘）
+            self.canvas.draw_idle()
             
             # 发出画布更新信号
             self.canvas_updated.emit()
@@ -413,22 +413,21 @@ class ZoomableCanvas(QWidget):
                 self.last_x = event.xdata
                 self.last_y = event.ydata
                 
-                # 直接重绘，确保拖动流畅
-                self.canvas.draw()
+                # 异步重绘：合并同一帧内多次 motion 请求，减轻卡顿与抖动
+                self.canvas.draw_idle()
                 
             except Exception as e:
                 # 忽略可能的异常，确保拖动过程稳定
                 pass
     
     def clear(self):
-        """清除画布"""
+        """清除画布（不立即 draw，由随后的绘图与 update_view 统一刷新，避免重复全量重绘）"""
         self.ax.clear()
         self.ax.grid(True)
-        self.canvas.draw()
     
     def update_view(self):
         """更新视图"""
-        self.canvas.draw()
+        self.canvas.draw_idle()
         self.canvas_updated.emit()
     
     def set_axes_limits(self, x_min, x_max, y_min, y_max):
@@ -443,7 +442,7 @@ class ZoomableCanvas(QWidget):
         """
         self.ax.set_xlim(x_min, x_max)
         self.ax.set_ylim(y_min, y_max)
-        self.canvas.draw()
+        self.canvas.draw_idle()
     
     def get_axes_limits(self):
         """
@@ -501,7 +500,7 @@ class ZoomableCanvas(QWidget):
          # ✅ 修改：设置更大的默认视图范围
         self.ax.set_xlim(-50, 50)
         self.ax.set_ylim(-50, 50)
-        self.canvas.draw()
+        self.canvas.draw_idle()
         self.canvas_updated.emit()
     
     def zoom_to_rectangle(self, x1, y1, x2, y2):
@@ -527,7 +526,7 @@ class ZoomableCanvas(QWidget):
         self.ax.set_ylim(y_min - y_range * 0.1, y_max + y_range * 0.1)
         
         # 更新画布
-        self.canvas.draw()
+        self.canvas.draw_idle()
         self.canvas_updated.emit()
     
     def toggle_grid(self, show=True):
@@ -538,7 +537,7 @@ class ZoomableCanvas(QWidget):
         show (bool): 是否显示网格
         """
         self.ax.grid(show)
-        self.canvas.draw()
+        self.canvas.draw_idle()
     
     def toggle_axes(self, show=True):
         """
@@ -548,7 +547,7 @@ class ZoomableCanvas(QWidget):
         show (bool): 是否显示坐标轴
         """
         self.ax.set_axis_on() if show else self.ax.set_axis_off()
-        self.canvas.draw()
+        self.canvas.draw_idle()
     
     def set_grid_style(self, style='both'):
         """
@@ -566,4 +565,4 @@ class ZoomableCanvas(QWidget):
         else:  # 'both'
             self.ax.grid(True, which='both')
         
-        self.canvas.draw()
+        self.canvas.draw_idle()
