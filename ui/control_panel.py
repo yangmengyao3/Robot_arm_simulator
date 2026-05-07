@@ -402,11 +402,23 @@ class RobotArmPanel(QWidget):
         参数:
         params (dict): 机械臂参数
         """
-        self.base_x_spin.setValue(params.get('base_x', 0))
-        self.base_y_spin.setValue(params.get('base_y', 0))
-        self.angle_spin.setValue(params.get('angle', 0))
-        self.angle_slider.setValue(int(params.get('angle', 0)))
-        self.radius_spin.setValue(params.get('radius', 1))#1是抓手的半径
+        angle_range_text = self.angle_range_combo.currentText()
+        self._set_angle_spin_and_slider_range(angle_range_text)
+        
+        for w in (self.base_x_spin, self.base_y_spin, self.angle_spin, self.radius_spin, self.angle_slider):
+            w.blockSignals(True)
+        try:
+            self.base_x_spin.setValue(params.get('base_x', 0))
+            self.base_y_spin.setValue(params.get('base_y', 0))
+            ang = params.get('angle', 0)
+            self.angle_spin.setValue(ang)
+            iv = int(round(ang))
+            iv = max(self.angle_slider.minimum(), min(self.angle_slider.maximum(), iv))
+            self.angle_slider.setValue(iv)
+            self.radius_spin.setValue(params.get('radius', 1))#1是抓手的半径
+        finally:
+            for w in (self.base_x_spin, self.base_y_spin, self.angle_spin, self.radius_spin, self.angle_slider):
+                w.blockSignals(False)
         
         # ✅ 使用传入的抓手坐标参数（这些值已经在 RobotArm 类中用正确的 radius 计算过）
         gripper_x = params.get('gripper_x', 0)
@@ -442,19 +454,33 @@ class RobotArmPanel(QWidget):
         else:
             self.gripper_pos_label.setText(f"抓手坐标: ({x:.3f}, {y:.3f})")
     
+    def _set_angle_spin_and_slider_range(self, angle_range_text):
+        """仅根据角度范围模式设置输入框与滑块的可调范围（不改动当前角度值）。"""
+        if angle_range_text == '0~360度':
+            self.angle_spin.setRange(0, 360)
+            self.angle_slider.setRange(0, 360)
+        elif angle_range_text == '-360~360度':
+            self.angle_spin.setRange(-360, 360)
+            self.angle_slider.setRange(-360, 360)
+        elif angle_range_text == '-180~180度':
+            self.angle_spin.setRange(-180, 180)
+            self.angle_slider.setRange(-180, 180)
+        else:
+            self.angle_spin.setRange(0, 360)
+            self.angle_slider.setRange(0, 360)
+    
     def update_angle_slider_range(self):
         """
         根据当前选择的角度范围更新角度滑块的范围
         """
         angle_range_text = self.angle_range_combo.currentText()
+        self._set_angle_spin_and_slider_range(angle_range_text)
         current_angle = self.angle_spin.value()
         
         if angle_range_text == '0~360度':
-            self.angle_slider.setRange(0, 360)
             # 将当前角度映射到0-360范围
             mapped_angle = current_angle % 360
         elif angle_range_text == '-360~360度':
-            self.angle_slider.setRange(-360, 360)
             # 将当前角度映射到-360-360范围
             while current_angle > 360:
                 current_angle -= 720
@@ -462,16 +488,22 @@ class RobotArmPanel(QWidget):
                 current_angle += 720
             mapped_angle = current_angle
         elif angle_range_text == '-180~180度':
-            self.angle_slider.setRange(-180, 180)
             # 将当前角度映射到-180-180范围
             mapped_angle = ((current_angle + 180) % 360) - 180
         else:
-            self.angle_slider.setRange(0, 360)
             mapped_angle = current_angle % 360
         
-        # 更新滑块和输入框的值
-        self.angle_slider.setValue(int(mapped_angle))
-        self.angle_spin.setValue(mapped_angle)
+        # 更新滑块和输入框的值（避免递归触发 parameter_changed）
+        self.angle_spin.blockSignals(True)
+        self.angle_slider.blockSignals(True)
+        try:
+            self.angle_spin.setValue(mapped_angle)
+            iv = int(round(mapped_angle))
+            iv = max(self.angle_slider.minimum(), min(self.angle_slider.maximum(), iv))
+            self.angle_slider.setValue(iv)
+        finally:
+            self.angle_spin.blockSignals(False)
+            self.angle_slider.blockSignals(False)
     
     def on_angle_range_changed(self, text):
         """

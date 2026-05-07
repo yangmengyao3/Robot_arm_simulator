@@ -25,6 +25,7 @@ class RobotArm:
         self.angle = angle
         self.radius = radius
         self.color = color
+        self.angle_range = '0-360'
         
         # 计算抓手位置
         self.update_gripper_position()
@@ -84,6 +85,25 @@ class RobotArm:
             
         self.update_gripper_position()
     
+    @staticmethod
+    def normalize_angle_to_range(angle, angle_range):
+        """
+        将任意角度（度）规范化到当前角度范围模式的取值区间内（仅数值，不修改实例状态）。
+        用于界面展示或与机械臂设置一致的转换结果角度。
+        """
+        if angle_range == '0-360':
+            return angle % 360
+        if angle_range == '-360-360':
+            a = angle
+            while a > 360:
+                a -= 720
+            while a < -360:
+                a += 720
+            return a
+        if angle_range == '-180-180':
+            return ((angle + 180) % 360) - 180
+        return angle % 360
+    
     def set_angle_range(self, angle_range):
         """
         设置角度范围模式
@@ -127,8 +147,7 @@ class RobotArm:
         参数:
         d_angle (float): 旋转角度增量（度）
         """
-        self.angle = (self.angle + d_angle) % 360
-        self.update_gripper_position()
+        self.set_angle(self.angle + d_angle)
     
     def get_gripper_position(self):
         """
@@ -197,7 +216,7 @@ class RobotArm:
         if base_y is not None:
             self.base_y = base_y
         if angle is not None:
-            self.angle = angle
+            self.set_angle(angle)
         if radius is not None:
             self.radius = radius
         if color is not None:

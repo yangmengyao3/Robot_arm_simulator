@@ -447,7 +447,8 @@ class RobotArmSimulator(QMainWindow):
                     'base_y': self.robot_arm.base_y,
                     'angle': self.robot_arm.angle,
                     'radius': self.robot_arm.radius,
-                    'color': self.robot_arm.color
+                    'color': self.robot_arm.color,
+                    'angle_range': self.robot_arm.angle_range,
                 },
                 'coordinate_systems': {}
             }
@@ -1191,12 +1192,29 @@ class RobotArmSimulator(QMainWindow):
                 arm_data = data['robot_arm']
                  # 确保 robot_arm 是字典类型
                 if isinstance(arm_data, dict):
-                    self.robot_arm.base_x = arm_data.get('base_x', 0)
-                    self.robot_arm.base_y = arm_data.get('base_y', 0)
-                    self.robot_arm.angle = arm_data.get('angle', 45)
-                    # self.robot_arm.length = arm_data.get('length', 2)
-                    self.robot_arm.radius = arm_data.get('radius', arm_data.get('length', 2))  # ✅ 兼容旧版本
-                    self.robot_arm.color = arm_data.get('color', 'red')
+                    rng = arm_data.get('angle_range', '0-360')
+                    ui_range_map = {
+                        '0-360': '0~360度',
+                        '-360-360': '-360~360度',
+                        '-180-180': '-180~180度',
+                    }
+                    if rng not in ui_range_map:
+                        rng = '0-360'
+                    if rng in ui_range_map:
+                        self.control_panel.robot_panel.angle_range_combo.blockSignals(True)
+                        try:
+                            self.control_panel.robot_panel.angle_range_combo.setCurrentText(ui_range_map[rng])
+                        finally:
+                            self.control_panel.robot_panel.angle_range_combo.blockSignals(False)
+                        self.control_panel.robot_panel._set_angle_spin_and_slider_range(ui_range_map[rng])
+                    self.robot_arm.set_angle_range(rng)
+                    self.robot_arm.update_parameters(
+                        base_x=arm_data.get('base_x', 0),
+                        base_y=arm_data.get('base_y', 0),
+                        angle=arm_data.get('angle', 45),
+                        radius=arm_data.get('radius', arm_data.get('length', 2)),
+                        color=arm_data.get('color', 'red'),
+                    )
                     self.add_log("加载了机械臂数据", "info")
                 else:
                 # 如果不是字典，尝试转换或提示用户
@@ -1481,13 +1499,7 @@ class RobotArmSimulator(QMainWindow):
     
     def on_robot_parameter_changed(self):
         """当机械臂参数改变时的处理函数"""
-        # 获取控制面板中的参数
-        params = self.control_panel.get_robot_parameters()
-        
-        # 更新机械臂参数
-        self.robot_arm.update_parameters(**params)
-        
-        # 处理角度范围设置
+        # 先应用角度范围模式，再写入角度，保证 set_angle 规范化与界面一致
         angle_range_text = self.control_panel.robot_panel.angle_range_combo.currentText()
         angle_range_map = {
             '0~360度': '0-360',
@@ -1496,6 +1508,9 @@ class RobotArmSimulator(QMainWindow):
         }
         if angle_range_text in angle_range_map:
             self.robot_arm.set_angle_range(angle_range_map[angle_range_text])
+        
+        params = self.control_panel.get_robot_parameters()
+        self.robot_arm.update_parameters(**params)
         
         # 注意：根据需求，世界坐标系在视觉领域也叫机械坐标系，两者为一个概念
         # 因此不再更新单独的机械坐标系原点
@@ -1565,6 +1580,19 @@ class RobotArmSimulator(QMainWindow):
         
         # # 更新抓手位置显示，包含角度信息
         # self.control_panel.robot_panel.update_gripper_position_display(gripper_x, gripper_y, self.robot_arm.angle)
+    
+    def _display_angle_for_transform_target(self, angle_deg, target_name):
+        """
+        坐标转换结果中的角度展示规则：
+        - 目标为「图像坐标系」时：方向角固定按 0~360° 显示；
+        - 目标为世界坐标系等与机械臂一致时：按机械臂设置中的角度范围模式显示。
+        """
+        if target_name == "图像坐标系":
+            a = angle_deg % 360
+            if a < 0:
+                a += 360
+            return a
+        return RobotArm.normalize_angle_to_range(angle_deg, self.robot_arm.angle_range)
     
     def update_view_info(self):
         """更新视图信息"""
@@ -1849,6 +1877,7 @@ class RobotArmSimulator(QMainWindow):
                         t_angle = (0.0 - target_sys.x_angle) % 360
                         if t_angle > 180:
                             t_angle -= 360
+                        t_angle = self._display_angle_for_transform_target(t_angle, target_name)
                         
                         print(f"✅ 步骤 3 - 坐标转换：世界坐标 ({x:.2f}, {y:.2f}) -> {target_name}坐标 ({tx:.2f}, {ty:.2f}), 角度：{t_angle:.2f}°")
                         
@@ -2457,11 +2486,7 @@ class RobotArmSimulator(QMainWindow):
             
             # 进行坐标转换
             tx, ty , t_angle= self.transformer.transform_point(x, y, angle, source_name, target_name)
-            
-            # 转换角度（如果需要）
-            # t_angle = self.transformer.transform_angle(angle, source_name, target_name)
-            # 注意：角度转换可能需要根据具体需求进行调整
-            # t_angle = angle
+            t_angle = self._display_angle_for_transform_target(t_angle, target_name)
             
             # 如果提供了行号，则更新表格中的目标坐标
             if row is not None:
@@ -2528,6 +2553,7 @@ class RobotArmSimulator(QMainWindow):
                         t_angle = (angle - target_sys.x_angle) % 360
                         if t_angle > 180:
                             t_angle -= 360
+                        t_angle = self._display_angle_for_transform_target(t_angle, target_name)
                         
                         print(f"✅ 步骤 3 - 坐标转换：世界坐标 ({x:.2f}, {y:.2f}) -> {target_name}坐标 ({tx:.2f}, {ty:.2f}), 角度：{t_angle:.2f}°")
                         
@@ -2970,6 +2996,7 @@ class RobotArmSimulator(QMainWindow):
                                 t_angle = (world_angle - target_sys.x_angle) % 360
                                 if t_angle > 180:
                                     t_angle -= 360
+                                t_angle = self._display_angle_for_transform_target(t_angle, target_name)
                                 
                                 # ✅ 打印调试信息
                                 print(f"点 {name}: 世界坐标 ({world_x:.2f}, {world_y:.2f}) -> "
