@@ -87,11 +87,11 @@ class CoordinateTransformer:
         
         result = source_system.transform_point(x, y, target_system)
         
-        # 如果提供了角度信息，计算角度差
+        # 如果提供了角度信息，按各坐标系 X 轴方位角转换（与点位的世界系方位一致）
         if angle is not None:
-            # 计算两个坐标系之间的角度差
-            angle_diff = target_system.x_angle - source_system.x_angle
-            transformed_angle = angle + angle_diff
+            # 源系中相对 X 轴的角为 angle 时，世界平面内 ray 的方位 = source.x_angle + angle
+            # 在目标系中相对 X 轴 = 方位 - target.x_angle
+            transformed_angle = angle + source_system.x_angle - target_system.x_angle
             # 标准化角度到 -360 到 360 范围
             while transformed_angle > 360:
                 transformed_angle -= 360
